@@ -32,7 +32,7 @@ The magnetic rejection feature reduces the errors that result from temporary mag
 
 ### Algorithm outputs
 
-The algorithm provides three outputs: quaternion, linear acceleration, and Earth acceleration.  The quaternion describes the orientation of the sensor relative to the Earth using the North-West-Up (NWU) convention.  This can be converted to a rotation matrix using the `FusionQuaternionToMatrix` function or to Euler angles using the `FusionQuaternionToEuler` function.  The linear acceleration is the accelerometer measurement with the 1 g of gravity removed.  The Earth acceleration is the accelerometer measurement in the Earth coordinate frame with the 1 g of gravity removed.
+The algorithm provides three outputs: quaternion, linear acceleration, and Earth acceleration.  The quaternion describes the orientation of the sensor relative to the Earth.  This can be converted to a rotation matrix using the `FusionQuaternionToMatrix` function or to Euler angles using the `FusionQuaternionToEuler` function.  The linear acceleration is the accelerometer measurement with the 1 g of gravity removed.  The Earth acceleration is the accelerometer measurement in the Earth coordinate frame with the 1 g of gravity removed.  The algorithm supports North-West-Up (NWU), East-North-Up (ENU), and North-East-Down (NED) axes conventions.
 
 ### Algorithm settings
 
@@ -40,6 +40,7 @@ The AHRS algorithm settings are defined by the `FusionAhrsSettings` structure an
 
 | Setting                 | Description                                                                                                                                                                                                   |
 |-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `convention`            | Earth axes convention (NWD, ENU, or NED).                                                                                                                                                                     |
 | `gain`                  | Determines the influence of the gyroscope relative to other sensors.  A value of 0.5 is appropriate for most applications.                                                                                    |
 | `accelerationRejection` | Threshold (in degrees) used by the acceleration rejection feature.  A value of zero will disable this feature.  A value of 10 degrees is appropriate for most applications.                                   |
 | `magneticRejection`     | Threshold (in degrees) used by the magnetic rejection feature.  A value of zero will disable the feature. A value of 20 degrees is appropriate for most applications.                                         |

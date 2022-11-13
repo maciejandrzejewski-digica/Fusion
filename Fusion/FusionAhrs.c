@@ -27,6 +27,13 @@
 #define INITIALISATION_PERIOD (3.0f)
 
 //------------------------------------------------------------------------------
+// Function declarations
+
+static FusionVector HalfExpectedAccelerometer(const FusionAhrs *const ahrs);
+
+static FusionVector HalfExpectedMagnetometer(const FusionAhrs *const ahrs);
+
+//------------------------------------------------------------------------------
 // Functions
 
 /**
@@ -35,6 +42,7 @@
  */
 void FusionAhrsInitialise(FusionAhrs *const ahrs) {
     const FusionAhrsSettings settings = {
+            .convention = FusionConventionNwu,
             .gain = 0.5f,
             .accelerationRejection = 90.0f,
             .magneticRejection = 90.0f,
@@ -70,6 +78,7 @@ void FusionAhrsReset(FusionAhrs *const ahrs) {
  * @param settings Settings.
  */
 void FusionAhrsSetSettings(FusionAhrs *const ahrs, const FusionAhrsSettings *const settings) {
+    ahrs->settings.convention = settings->convention;
     ahrs->settings.gain = settings->gain;
     if ((settings->accelerationRejection == 0.0f) || (settings->rejectionTimeout == 0)) {
         ahrs->settings.accelerationRejection = FLT_MAX;
@@ -113,12 +122,8 @@ void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, cons
         }
     }
 
-    // Calculate direction of gravity indicated by algorithm
-    const FusionVector halfGravity = {
-            .axis.x = Q.x * Q.z - Q.w * Q.y,
-            .axis.y = Q.y * Q.z + Q.w * Q.x,
-            .axis.z = Q.w * Q.w - 0.5f + Q.z * Q.z,
-    }; // third column of transposed rotation matrix scaled by 0.5
+    // Calculate expected accelerometer direction indicated by algorithm
+    const FusionVector expectedAccelerometer = HalfExpectedAccelerometer(ahrs);
 
     // Calculate accelerometer feedback
     FusionVector halfAccelerometerFeedback = FUSION_VECTOR_ZERO;
@@ -135,7 +140,7 @@ void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, cons
         }
 
         // Calculate accelerometer feedback scaled by 0.5
-        ahrs->halfAccelerometerFeedback = FusionVectorCrossProduct(FusionVectorNormalise(accelerometer), halfGravity);
+        ahrs->halfAccelerometerFeedback = FusionVectorCrossProduct(FusionVectorNormalise(accelerometer), expectedAccelerometer);
 
         // Ignore accelerometer if acceleration distortion detected
         if ((ahrs->initialising == true) || (FusionVectorMagnitudeSquared(ahrs->halfAccelerometerFeedback) <= ahrs->settings.accelerationRejection)) {
@@ -155,20 +160,16 @@ void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, cons
         // Set to compass heading if magnetic rejection times out
         ahrs->magneticRejectionTimeout = false;
         if (ahrs->magneticRejectionTimer > ahrs->settings.rejectionTimeout) {
-            FusionAhrsSetHeading(ahrs, FusionCompassCalculateHeading(halfGravity, magnetometer));
+            FusionAhrsSetHeading(ahrs, FusionCompassCalculateHeading(ahrs->settings.convention, expectedAccelerometer, magnetometer));
             ahrs->magneticRejectionTimer = 0;
             ahrs->magneticRejectionTimeout = true;
         }
 
-        // Compute direction of west indicated by algorithm
-        const FusionVector halfWest = {
-                .axis.x = Q.x * Q.y + Q.w * Q.z,
-                .axis.y = Q.w * Q.w - 0.5f + Q.y * Q.y,
-                .axis.z = Q.y * Q.z - Q.w * Q.x
-        }; // second column of transposed rotation matrix scaled by 0.5
+        // Calculate expected magnetometer direction indicated by algorithm
+        const FusionVector expectedMagnetometer = HalfExpectedMagnetometer(ahrs);
 
         // Calculate magnetometer feedback scaled by 0.5
-        ahrs->halfMagnetometerFeedback = FusionVectorCrossProduct(FusionVectorNormalise(FusionVectorCrossProduct(halfGravity, magnetometer)), halfWest);
+        ahrs->halfMagnetometerFeedback = FusionVectorCrossProduct(FusionVectorNormalise(FusionVectorCrossProduct(expectedAccelerometer, magnetometer)), expectedMagnetometer);
 
         // Ignore magnetometer if magnetic distortion detected
         if ((ahrs->initialising == true) || (FusionVectorMagnitudeSquared(ahrs->halfMagnetometerFeedback) <= ahrs->settings.magneticRejection)) {
@@ -191,6 +192,65 @@ void FusionAhrsUpdate(FusionAhrs *const ahrs, const FusionVector gyroscope, cons
 
     // Normalise quaternion
     ahrs->quaternion = FusionQuaternionNormalise(ahrs->quaternion);
+#undef Q
+}
+
+/**
+ * @brief Returns the expected accelerometer direction scaled by 0.5.
+ * @param ahrs AHRS algorithm structure.
+ * @return Expected accelerometer direction scaled by 0.5.
+ */
+static FusionVector HalfExpectedAccelerometer(const FusionAhrs *const ahrs) {
+#define Q ahrs->quaternion.element
+    switch (ahrs->settings.convention) {
+        case FusionConventionNwu:
+        case FusionConventionEnu:
+            return (FusionVector) {
+                    .axis.x = Q.x * Q.z - Q.w * Q.y,
+                    .axis.y = Q.y * Q.z + Q.w * Q.x,
+                    .axis.z = Q.w * Q.w - 0.5f + Q.z * Q.z,
+            }; // third column of transposed rotation matrix scaled by 0.5
+        case FusionConventionNed:
+            return (FusionVector) {
+                    .axis.x = -1.0f * (Q.x * Q.z - Q.w * Q.y),
+                    .axis.y = -1.0f * (Q.y * Q.z + Q.w * Q.x),
+                    .axis.z = -1.0f * (Q.w * Q.w - 0.5f + Q.z * Q.z),
+            }; // third column of transposed rotation matrix scaled by -0.5
+        default:
+            return FUSION_VECTOR_ZERO; // avoid compiler warning
+    }
+#undef Q
+}
+
+/**
+ * @brief Returns the expected magnetometer direction scaled by 0.5.
+ * @param ahrs AHRS algorithm structure.
+ * @return Expected magnetometer direction scaled by 0.5.
+ */
+static FusionVector HalfExpectedMagnetometer(const FusionAhrs *const ahrs) {
+#define Q ahrs->quaternion.element
+    switch (ahrs->settings.convention) {
+        case FusionConventionNwu:
+            return (FusionVector) {
+                    .axis.x = Q.x * Q.y + Q.w * Q.z,
+                    .axis.y = Q.w * Q.w - 0.5f + Q.y * Q.y,
+                    .axis.z = Q.y * Q.z - Q.w * Q.x,
+            }; // second column of transposed rotation matrix scaled by 0.5
+        case FusionConventionEnu:
+            return (FusionVector) {
+                    .axis.x = -1.0f * (Q.w * Q.w - 0.5f + Q.x * Q.x),
+                    .axis.y = -1.0f * (Q.x * Q.y - Q.w * Q.z),
+                    .axis.z = -1.0f * (Q.x * Q.z + Q.w * Q.y),
+            }; // first column of transposed rotation matrix scaled by -0.5
+        case FusionConventionNed:
+            return (FusionVector) {
+                    .axis.x = -1.0f * (Q.x * Q.y + Q.w * Q.z),
+                    .axis.y = -1.0f * (Q.w * Q.w - 0.5f + Q.y * Q.y),
+                    .axis.z = -1.0f * (Q.y * Q.z - Q.w * Q.x),
+            }; // second column of transposed rotation matrix scaled by -0.5
+        default:
+            return FUSION_VECTOR_ZERO; // avoid compiler warning
+    }
 #undef Q
 }
 

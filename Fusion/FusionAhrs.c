@@ -223,9 +223,9 @@ static FusionVector HalfGravity(const FusionAhrs *const ahrs) {
 }
 
 /**
- * @brief Returns the direction of magnetic scaled by 0.5.
+ * @brief Returns the direction of the magnetic field scaled by 0.5.
  * @param ahrs AHRS algorithm structure.
- * @return Direction of magnetic scaled by 0.5.
+ * @return Direction of the magnetic field scaled by 0.5.
  */
 static FusionVector HalfMagnetic(const FusionAhrs *const ahrs) {
 #define Q ahrs->quaternion.element

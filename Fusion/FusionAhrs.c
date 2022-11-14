@@ -360,23 +360,23 @@ FusionVector FusionAhrsGetEarthAcceleration(const FusionAhrs *const ahrs) {
     const float qxqy = Q.x * Q.y;
     const float qxqz = Q.x * Q.z;
     const float qyqz = Q.y * Q.z;
-    FusionVector earthAcceleration = {
+    FusionVector accelerometer = {
             .axis.x = 2.0f * ((qwqw - 0.5f + Q.x * Q.x) * A.x + (qxqy - qwqz) * A.y + (qxqz + qwqy) * A.z),
             .axis.y = 2.0f * ((qxqy + qwqz) * A.x + (qwqw - 0.5f + Q.y * Q.y) * A.y + (qyqz - qwqx) * A.z),
             .axis.z = 2.0f * ((qxqz - qwqy) * A.x + (qyqz + qwqx) * A.y + (qwqw - 0.5f + Q.z * Q.z) * A.z),
     }; // rotation matrix multiplied with the accelerometer
 
     // Remove gravity from accelerometer measurement
+    const FusionVector gravity = {0, 0, 1};
     switch (ahrs->settings.convention) {
         case FusionConventionNwu:
         case FusionConventionEnu:
-            earthAcceleration.axis.z -= 1.0f;
-            break;
+            return FusionVectorSubtract(accelerometer, gravity);
         case FusionConventionNed:
-            earthAcceleration.axis.z += 1.0f;
-            break;
+            return FusionVectorAdd(accelerometer, gravity);
+        default:
+            return FUSION_VECTOR_ZERO; // avoid compiler warning
     }
-    return earthAcceleration;
 #undef Q
 #undef A
 }

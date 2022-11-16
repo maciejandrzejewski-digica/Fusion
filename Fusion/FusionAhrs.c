@@ -204,18 +204,22 @@ static FusionVector HalfGravity(const FusionAhrs *const ahrs) {
 #define Q ahrs->quaternion.element
     switch (ahrs->settings.convention) {
         case FusionConventionNwu:
-        case FusionConventionEnu:
-            return (FusionVector) {
+        case FusionConventionEnu: {
+            const FusionVector halfGravity = {
                     .axis.x = Q.x * Q.z - Q.w * Q.y,
                     .axis.y = Q.y * Q.z + Q.w * Q.x,
                     .axis.z = Q.w * Q.w - 0.5f + Q.z * Q.z,
             }; // third column of transposed rotation matrix scaled by 0.5
-        case FusionConventionNed:
-            return (FusionVector) {
-                    .axis.x = -1.0f * (Q.x * Q.z - Q.w * Q.y),
+            return halfGravity;
+        }
+        case FusionConventionNed: {
+            const FusionVector halfGravity = {
+                    .axis.x = Q.w * Q.y - Q.x * Q.z,
                     .axis.y = -1.0f * (Q.y * Q.z + Q.w * Q.x),
-                    .axis.z = -1.0f * (Q.w * Q.w - 0.5f + Q.z * Q.z),
+                    .axis.z = 0.5f - Q.w * Q.w - Q.z * Q.z,
             }; // third column of transposed rotation matrix scaled by -0.5
+            return halfGravity;
+        }
         default:
             return FUSION_VECTOR_ZERO; // avoid compiler warning
     }
@@ -230,24 +234,30 @@ static FusionVector HalfGravity(const FusionAhrs *const ahrs) {
 static FusionVector HalfMagnetic(const FusionAhrs *const ahrs) {
 #define Q ahrs->quaternion.element
     switch (ahrs->settings.convention) {
-        case FusionConventionNwu:
-            return (FusionVector) {
+        case FusionConventionNwu: {
+            const FusionVector halfMagnetic = {
                     .axis.x = Q.x * Q.y + Q.w * Q.z,
                     .axis.y = Q.w * Q.w - 0.5f + Q.y * Q.y,
                     .axis.z = Q.y * Q.z - Q.w * Q.x,
             }; // second column of transposed rotation matrix scaled by 0.5
-        case FusionConventionEnu:
-            return (FusionVector) {
-                    .axis.x = -1.0f * (Q.w * Q.w - 0.5f + Q.x * Q.x),
-                    .axis.y = -1.0f * (Q.x * Q.y - Q.w * Q.z),
+            return halfMagnetic;
+        }
+        case FusionConventionEnu: {
+            const FusionVector halfMagnetic = {
+                    .axis.x = 0.5f - Q.w * Q.w - Q.x * Q.x,
+                    .axis.y = Q.w * Q.z - Q.x * Q.y,
                     .axis.z = -1.0f * (Q.x * Q.z + Q.w * Q.y),
             }; // first column of transposed rotation matrix scaled by -0.5
-        case FusionConventionNed:
-            return (FusionVector) {
+            return halfMagnetic;
+        }
+        case FusionConventionNed: {
+            const FusionVector halfMagnetic = {
                     .axis.x = -1.0f * (Q.x * Q.y + Q.w * Q.z),
-                    .axis.y = -1.0f * (Q.w * Q.w - 0.5f + Q.y * Q.y),
-                    .axis.z = -1.0f * (Q.y * Q.z - Q.w * Q.x),
+                    .axis.y = 0.5f - Q.w * Q.w - Q.y * Q.y,
+                    .axis.z = Q.w * Q.x - Q.y * Q.z,
             }; // second column of transposed rotation matrix scaled by -0.5
+            return halfMagnetic;
+        }
         default:
             return FUSION_VECTOR_ZERO; // avoid compiler warning
     }
@@ -367,16 +377,16 @@ FusionVector FusionAhrsGetEarthAcceleration(const FusionAhrs *const ahrs) {
     }; // rotation matrix multiplied with the accelerometer
 
     // Remove gravity from accelerometer measurement
-    const FusionVector gravity = {0, 0, 1};
     switch (ahrs->settings.convention) {
         case FusionConventionNwu:
         case FusionConventionEnu:
-            return FusionVectorSubtract(accelerometer, gravity);
+            accelerometer.axis.z -= 1.0f;
+            break;
         case FusionConventionNed:
-            return FusionVectorAdd(accelerometer, gravity);
-        default:
-            return FUSION_VECTOR_ZERO; // avoid compiler warning
+            accelerometer.axis.z += 1.0f;
+            break;
     }
+    return accelerometer;
 #undef Q
 #undef A
 }
